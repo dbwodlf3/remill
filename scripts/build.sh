@@ -17,19 +17,80 @@
 #   /path/to/home/remill
 #   /path/to/home/remill-build
 
+#######################################
+# Global variables
+#
+# SCRIPTS_DIR scripts directory absolute path. (/path/to/something/remill/scripts)
+# SRC_DIR source directory absolute path. base on SCRIPTS_DIR. (/path/to/something/remill)
+# CURR_DIR path where you command shell script.
+# BUILD_DIR path to build directory. base on CURR_DIR.
+# INSTALL_DIR path where make install target
+#
+# LLVM_VERSION prefix middle name to download cxx common from repository. from https://github.com/trailofbits/cxx-common/releases
+# LIBRARY_VERSION prefix name to download cxx common from repository. from https://github.com/trailofbits/cxx-common/releases
+# OS_VERSION os name. (ubuntu*, macos)
+# ARCH_VERSION architecture of machine. (amd64, aarch64)
+#
+# BUILD_FLAGS cmake flags.
+# USE_HOST_COMPILER if it's value 1 then will use host compiler or it is 0 then will use cxx common compiler from repository.
+#
+#######################################
 SCRIPTS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 SRC_DIR=$( cd "$( dirname "${SCRIPTS_DIR}" )" && pwd )
 CURR_DIR=$( pwd )
 BUILD_DIR="${CURR_DIR}/remill-build"
 INSTALL_DIR=/usr/local
 LLVM_VERSION=llvm900
+LIBRARY_VERSION=
 OS_VERSION=
 ARCH_VERSION=
 BUILD_FLAGS=
 USE_HOST_COMPILER=0
 
+#######################################
+# Attempt to detect the OS distribution name.
+# Globals:
+#   OS_VERSION
+#######################################
+function GetOSVersion
+{
+  source /etc/os-release
+
+  case "${ID,,}" in
+    *ubuntu*)
+      GetUbuntuOSVersion
+      return 0
+    ;;
+
+    *opensuse*)
+      OS_VERSION=opensuse
+      return 0
+    ;;
+
+    *arch*)
+      OS_VERSION=ubuntu16.04
+      return 0
+    ;;
+    
+    [Kk]ali)
+      OS_VERSION=ubuntu18.04
+      return 0;
+    ;;
+
+    *)
+      echo "[x] ${ID} is not yet a supported distribution."
+      return 1
+    ;;
+  esac
+}
+
+#######################################
+# Set ubuntu version on OS_VERSION
 # There are pre-build versions of various libraries for specific
 # Ubuntu releases.
+# Globals:
+#   OS_VERSION
+#######################################
 function GetUbuntuOSVersion
 {
   # Version name of OS (e.g. xenial, trusty).
@@ -71,7 +132,11 @@ function GetUbuntuOSVersion
   esac
 }
 
-# Figure out the architecture of the current machine.
+#######################################
+# Set Architecture of the current machine on ARCH_VERSION
+# Globals:
+#   ARCH_VERSION
+#######################################
 function GetArchVersion
 {
   local version=$( uname -m )
@@ -96,6 +161,12 @@ function GetArchVersion
   esac
 }
 
+#######################################
+# Download pre build and scripts for C and C++ 
+# libraries that are commonly used by Trail of Bits
+# Globals:
+#   BUILD_DIR
+#######################################
 function DownloadCxxCommon
 {
   local GITHUB_LIBS="${LIBRARY_VERSION}.tar.xz"
@@ -120,41 +191,15 @@ function DownloadCxxCommon
   return 0
 }
 
-# Attempt to detect the OS distribution name.
-function GetOSVersion
-{
-  source /etc/os-release
-
-  case "${ID,,}" in
-    *ubuntu*)
-      GetUbuntuOSVersion
-      return 0
-    ;;
-
-    *opensuse*)
-      OS_VERSION=opensuse
-      return 0
-    ;;
-
-    *arch*)
-      OS_VERSION=ubuntu16.04
-      return 0
-    ;;
-    
-    [Kk]ali)
-      OS_VERSION=ubuntu18.04
-      return 0;
-    ;;
-
-    *)
-      echo "[x] ${ID} is not yet a supported distribution."
-      return 1
-    ;;
-  esac
-}
-
+#######################################
 # Download pre-compiled version of cxx-common for this OS. This has things like
 # google protobuf, gflags, glog, gtest, capstone, and llvm in it.
+# Globals:
+#   BUILD_FLAGS
+#   BUILD_DIR
+#   OS_VERSION
+#   LIBRARY_VERSION
+#######################################
 function DownloadLibraries
 {
   # macOS packages
@@ -207,7 +252,11 @@ function DownloadLibraries
   return 0
 }
 
+#######################################
 # Configure the build.
+# Globals:
+#   USE_HOST_COMPILER
+#######################################
 function Configure
 {
   # Tell the remill CMakeLists.txt where the extracted libraries are. 
@@ -241,7 +290,9 @@ function Configure
   return $?
 }
 
+#######################################
 # Compile the code.
+#######################################
 function Build
 {
   if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -253,8 +304,13 @@ function Build
   return $?
 }
 
+#######################################
 # Get a LLVM version name for the build. This is used to find the version of
 # cxx-common to download.
+# Globals:
+#   LLVM_VERSION
+#   USE_HOST_COMPILER
+#######################################
 function GetLLVMVersion
 {
   case ${1} in
@@ -316,6 +372,15 @@ function GetLLVMVersion
   return 1
 }
 
+#######################################
+# Entry point this script.
+# Globals:
+#   INSTALL_DIR
+#   LLVM_VERSION
+#   BUILD_DIR
+#   BUILD_FLAGS
+#   USE_HOST_COMPILER
+#######################################
 function main
 {
   while [[ $# -gt 0 ]] ; do
